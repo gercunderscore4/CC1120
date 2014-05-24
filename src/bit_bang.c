@@ -4,18 +4,52 @@
  * PURPOSE: test CC1120 read and write capabilities
  * AUTHOR:  Geoffrey Card
  * DATE:    2014-05-22 - 
- * NOTES:   wait function and all I/O unimplemented
+ * NOTES:   Not optimized
+ *          Can't use standard Arduino SPI because this transmits 2 bytes per enable
  */
 
-#define BURST 0 // I have no idea what this is, so off for now
+// pins
+// to make this slighly faster, use direct I/O
+// http://arduino.cc/en/Reference/PortManipulation
+#define SCLK 6 // OUTPUT
+#define CSn  5 // OUTPUT
+#define SI   4 // OUTPUT
+#define SO   3 // INPUT
+
+// timing
+// 16 MHz, 62.5 ns, re-write if you change MCP
+// http://playground.arduino.cc/Main/AVR
+#define NSDELAY __asm__("nop\n\t")
+
+// burst
+// I have no idea what this is, so off for now
+#define BURST B00000000 // B01000000
 
 // I need to find a way to perform ns timing
 // these are minima, real values should be greater than (say +10 ns)
+/*
 #define T_SP 50 // ns
 #define T_CH 60 // ns
 #define T_CL 60 // ns
 #define T_SD 10 // ns
 #define T_HD 10 // ns
+*/
+
+/*
+ * set up CC1120 SPI
+ * PARAM:
+ *     none, pins are defined constants
+ * RETURN:
+ *     void, there's nothing to return, if it fails, nothing will work anyway
+ */
+void CC1120_setup (void)
+{
+	// set pins
+	pinMode(SCLK, OUTPUT);
+	pinMode(CSn,  OUTPUT);
+	pinMode(SI,   OUTPUT);
+	pinMode(SO,   OUTPUT);
+}
 
 /*
  * transfer data with the CC1120, read and write
@@ -29,59 +63,65 @@
  */
 short int CC1120_transfer (bool rw, char addr, char data_in)
 {
-	// WRITE
-
-	char s1 = 0, data_out = 0;
+	// all inputs and outputs
+	char si1 = (char) (rw << 7) | BURST | addr;
+	char si2 = (char) data_in;
+	char so1 = 0;
+	char so2 = 0;
 
 	// set CSn 0, ensure SCLK is 0
+	digitalWrite(SCLK, LOW);
+	digitalWrite(CSn,  LOW);
 	SCLK = 0;
 	CSn = 0;
 
 	// wait t_sp = 50 ns
-	wait(T_SP);
-
-	// SI = 0 => write
-	// SI = 1 => read
-	SI = rw;
-	SCLK = 1;
-	s1 |= (SO << 7) & 0x01;
-	wait(T_CH);
-	SCLK = 0;
-	wait(T_D);
-
-	// burst bit
-	SI =  BURST;
-	SCLK = 1;
-	s1 |= (SO << 6) & 0x01;
-	wait(T_CH);
-	SCLK = 0;
-	wait(T_D);
+	NSDELAY;
 
 	// address
-	for (int i = 5; i <= 0; i--) {
-		SI = (addr >> i) & 0x01;
-		SCLK = 1;
-		s1 |= SO << i;
-		wait(T_CH);
-		SCLK = 0;
-		wait(T_D);
+	for (int i = 7; i <= 0; i--) {
+		// Slave Input write
+		digitalWrite(SI, (si1 >> i) & 0x01);
+		// SCLK up
+		digitalWrite(SCLK, HIGH);
+		// Slave Output read
+		so1 |= (char) digitalRead(SO) << i;
+		// wait t_ch = 60 ns
+		NSDELAY;
+		// SCLK down
+		digitalWrite(SCLK, LOW);
+		// wait t_cl = 60 ns
+		NSDELAY;
 	}
 
-	// wait between bytes
-	wait(T_SD);
+	// wait between bytes, t_cl + t_sd = 70
+	NSDELAY;
+	NSDELAY;
 
 	// data transfer
 	for (int i = 7; i <= 0; i--) {
-		SI = (data_in >> i) & 0x01;
-		SCLK = 1;
-		data_out |= SO << i;
-		wait(T_HD);
-		SCLK = 0;
-		wait(T_NS);
+		// Slave Input write
+		digitalWrite(SI, (si2 >> i) & 0x01);
+		// SCLK up
+		digitalWrite(SCLK, HIGH);
+		// Slave Output read
+		so2 |= (char) digitalRead(SO) << i;
+		// wait t_hd = 10 ns
+		NSDELAY;
+		// SCLK down
+		digitalWrite(SCLK, LOW);
+		// wait t_sd = 10 ns
+		NSDELAY;
 	}
 	
-	// set CSn high
-	CSn = 1;
+	// wait t_ns = 200 ns
+	NSDELAY;
+	NSDELAY;
+	NSDELAY;
+	NSDELAY;
 	
-	return (short int) (s1 << 8) | data_out;
+	// set CSn high
+	digitalWrite(CSn, HIGH);
+	
+	return (short int) (so1 << 8) | so2;
 }
