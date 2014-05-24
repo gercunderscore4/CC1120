@@ -24,32 +24,54 @@ void CC1120_setup (void)
 	pinMode(SCLK, OUTPUT);
 	pinMode(CSn,  OUTPUT);
 	pinMode(SI,   OUTPUT);
-	pinMode(SO,   OUTPUT);
+	pinMode(SO,   INPUT);
 }
 
 /*
  * transfer data with the CC1120, read and write
  * PARAM:
  *     rw: read/write, 0 for write, 1 for read
+ *     burst:
  *     addr: six bit address of data
  *     data_in: data to write, if read then garbage is fine
+ *     strobe_mode: see swru295 page 18
  * RETURN:
  *     high byte: state
  *     low byte: data read
  */
-short int CC1120_transfer (bool rw, char addr, char data_in)
+short int CC1120_transfer (bool rw, bool burst, char addr, char data_in, char strobe_mode)
 {
 	// all inputs and outputs
-	char si1 = (char) (rw << 7) | BURST | addr;
+	char si1 = (char) (rw << 7) | (burst << 6) | addr;
 	char si2 = (char) data_in;
 	char so1 = 0;
 	char so2 = 0;
 
-	// set CSn 0, ensure SCLK is 0
-	digitalWrite(SCLK, LOW);
+	// set mode for RX/TX strobes
+	switch (strobe_mode) {
+		case SPWD_MODE:
+			digitalWrite(SCLK, LOW);
+			digitalWrite(SI,   LOW);
+			break;
+		case STX_MODE:
+			digitalWrite(SCLK, LOW);
+			digitalWrite(SI,   HIGH);
+			break;
+		case SIDLE_MODE:
+			digitalWrite(SCLK, HIGH);
+			digitalWrite(SI,   LOW);
+			break;
+		case SRX_MODE:
+			digitalWrite(SCLK, HIGH);
+			digitalWrite(SI,   HIGH);
+			break;
+		default:
+			digitalWrite(SCLK, LOW);
+			digitalWrite(SI,   LOW);
+			break;
+	}
+	// set CSn 0
 	digitalWrite(CSn,  LOW);
-	SCLK = 0;
-	CSn = 0;
 
 	// wait t_sp = 50 ns
 	NSDELAY;
