@@ -21,10 +21,6 @@
 // http://playground.arduino.cc/Main/AVR
 #define NSDELAY __asm__("nop\n\t")
 
-// burst
-// I have no idea what this is, so off for now
-#define BURST B00000000 // B01000000
-
 // I need to find a way to perform ns timing
 // these are minima, real values should be greater than (say +10 ns)
 /*
@@ -34,6 +30,12 @@
 #define T_SD 10 // ns
 #define T_HD 10 // ns
 */
+
+// strobe modes, page 18
+#define SPWD  0
+#define STX   1
+#define SIDLE 2
+#define SRX   3
 
 /*
  * set up CC1120 SPI
@@ -48,10 +50,12 @@ void CC1120_setup (void);
  * transfer data with the CC1120, read and write
  * PARAM:
  *     rw: read/write, 0 for write, 1 for read
+ *     burst:
  *     addr: six bit address of data
  *     data_in: data to write, if read then garbage is fine
+ *     strobe_mode: see swru295 page 18
  * RETURN:
  *     high byte: state
  *     low byte: data read
  */
-short int CC1120_transfer (bool rw, char addr, char data_in);
+short int CC1120_transfer (bool rw, bool burst, char addr, char data_in, char strobe_mode);
