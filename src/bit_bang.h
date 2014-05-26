@@ -37,6 +37,9 @@
 #define SIDLE 2
 #define SRX   3
 
+// burst mode
+#define BURST B01000000
+
 /*
  * set up CC1120 SPI
  * PARAM:
@@ -50,12 +53,14 @@ void CC1120_setup (void);
  * transfer data with the CC1120, read and write
  * PARAM:
  *     rw: read/write, 0 for write, 1 for read
- *     burst:
  *     addr: six bit address of data
- *     data_in: data to write, if read then garbage is fine
+ *     data_in: data to write, recommend NULL in read mode
  *     strobe_mode: see swru295 page 18
+ *     burst: number of bytes being transfered, burst mode is off if burst = 1, error if burst < 1
+ *            in write mode, data_in must have [burst] of bytes allocated for reading
+ *            in read mode, data_out must have [burst] bytes allocated for writing
+ *     data_out: address for writing slave output, recommend NULL in write mode
  * RETURN:
- *     high byte: state
- *     low byte: data read
+ *     state: the current state of the transceiver
  */
-short int CC1120_transfer (bool rw, bool burst, char addr, char data_in, char strobe_mode);
+char CC1120_transfer (char strobe_mode, bool rw, char addr, int burst, char* data_in, char* data_out);
