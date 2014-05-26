@@ -31,21 +31,33 @@ void CC1120_setup (void)
  * transfer data with the CC1120, read and write
  * PARAM:
  *     rw: read/write, 0 for write, 1 for read
- *     burst:
  *     addr: six bit address of data
- *     data_in: data to write, if read then garbage is fine
+ *     data_in: data to write, recommend NULL in read mode
  *     strobe_mode: see swru295 page 18
+ *     burst: number of bytes being transfered, burst mode is off if burst = 1, error if burst < 1
+ *            in write mode, data_in must have [burst] of bytes allocated for reading
+ *            in read mode, data_out must have [burst] bytes allocated for writing
+ *     data_out: address for writing slave output, recommend NULL in write mode
  * RETURN:
- *     high byte: state
- *     low byte: data read
+ *     state: the current state of the transceiver
  */
-short int CC1120_transfer (bool rw, bool burst, char addr, char data_in, char strobe_mode)
+char CC1120_transfer (char strobe_mode, bool rw, char addr, int burst, char* data_in, char* data_out)
 {
 	// all inputs and outputs
-	char si1 = (char) (rw << 7) | (burst << 6) | addr;
-	char si2 = (char) data_in;
-	char so1 = 0;
-	char so2 = 0;
+	char si = (char) (rw << 7) | addr;
+	char state = 0;
+	
+	// burst
+	if (burst > 1) {
+		// burst mode on
+		si |= BURST;
+	} else if (burst == 1) {
+		// signle byte, burst mode off
+	} else {
+		// error, set to read mode, get state, no data, return
+		rw = true;
+		burst = 0;
+	}
 
 	// set mode for RX/TX strobes
 	switch (strobe_mode) {
@@ -79,11 +91,11 @@ short int CC1120_transfer (bool rw, bool burst, char addr, char data_in, char st
 	// address
 	for (int i = 7; i <= 0; i--) {
 		// Slave Input write
-		digitalWrite(SI, (si1 >> i) & 0x01);
+		digitalWrite(SI, (si >> i) & 0x01);
 		// SCLK up
 		digitalWrite(SCLK, HIGH);
 		// Slave Output read
-		so1 |= (char) digitalRead(SO) << i;
+		state |= (char) digitalRead(SO) << i;
 		// wait t_ch = 60 ns
 		NSDELAY;
 		// SCLK down
@@ -92,24 +104,59 @@ short int CC1120_transfer (bool rw, bool burst, char addr, char data_in, char st
 		NSDELAY;
 	}
 
-	// wait between bytes, t_cl + t_sd = 70
-	NSDELAY;
-	NSDELAY;
-
 	// data transfer
-	for (int i = 7; i <= 0; i--) {
-		// Slave Input write
-		digitalWrite(SI, (si2 >> i) & 0x01);
-		// SCLK up
-		digitalWrite(SCLK, HIGH);
-		// Slave Output read
-		so2 |= (char) digitalRead(SO) << i;
-		// wait t_hd = 10 ns
-		NSDELAY;
-		// SCLK down
-		digitalWrite(SCLK, LOW);
-		// wait t_sd = 10 ns
-		NSDELAY;
+	if (rw == true) {
+		// READ
+		
+		// read all the bytes
+		for (int j = 0; j < burst; j++) {
+			
+			// wait between bytes, t_cl + t_sd = 70
+			NSDELAY;
+			NSDELAY;
+		
+			// data transfer
+			for (int i = 7; i <= 0; i--) {
+				// Slave Input write
+
+				// SCLK up
+				digitalWrite(SCLK, HIGH);
+				// Slave Output read
+				data_out[j] |= (char) digitalRead(SO) << i;
+				// wait t_hd = 10 ns
+				NSDELAY;
+				// SCLK down
+				digitalWrite(SCLK, LOW);
+				// wait t_sd = 10 ns
+				NSDELAY;
+			}
+		}
+	} else {
+		// WRITE
+		
+		// write all the bytes
+		for (int j = 0; j < burst; j++) {
+			
+			// wait between bytes, t_cl + t_sd = 70
+			NSDELAY;
+			NSDELAY;
+		
+			// data transfer
+			for (int i = 7; i <= 0; i--) {
+				// Slave Input write
+				digitalWrite(SI, (data_in[j] >> i) & 0x01);
+				// SCLK up
+				digitalWrite(SCLK, HIGH);
+				// Slave Output read
+				state |= (char) digitalRead(SO) << i;
+				// wait t_hd = 10 ns
+				NSDELAY;
+				// SCLK down
+				digitalWrite(SCLK, LOW);
+				// wait t_sd = 10 ns
+				NSDELAY;
+			}
+		}
 	}
 	
 	// wait t_ns = 200 ns
@@ -121,5 +168,5 @@ short int CC1120_transfer (bool rw, bool burst, char addr, char data_in, char st
 	// set CSn high
 	digitalWrite(CSn, HIGH);
 	
-	return (short int) (so1 << 8) | so2;
+	return state;
 }
