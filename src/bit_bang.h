@@ -31,12 +31,9 @@
 #define T_HD 10 // ns
 */
 
-// strobe modes, page 18
-#define SPWD  0
-#define STX   1
-#define SIDLE 2
-#define SRX   3
-
+// read / !write
+#define READ  B10000000
+#define WRITE B00000000
 // burst mode
 #define BURST B01000000
 
