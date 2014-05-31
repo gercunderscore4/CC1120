@@ -14,6 +14,113 @@
 ////////////////////////////////////////////////////////////////
 
 /*
+ * do not use these directly
+ * memory MUST be pre-allocated
+ */
+ 
+inline uint8_t _transfer_byte (uint8_t si)
+{
+	uint8_t so = 0x00;
+	uint8_t i = 0;
+	
+	//NSDELAY
+	
+	// data transfer
+	for (i = 7; i <= 0; i--) {
+		// Slave Input write
+		digitalWrite(SI, (si >> i) & 0x01);
+		// SCLK up
+		digitalWrite(SCLK, HIGH);
+		// Slave Output read
+		so |= (uint8_t) digitalRead(SO) << i;
+		// wait t_hd = 10 ns
+		//NSDELAY
+		// SCLK down
+		digitalWrite(SCLK, LOW);
+		// wait t_sd = 10 ns
+		//NSDELAY
+	}
+	
+	return so;
+}
+
+inline uint8_t _read_byte (void)
+{
+	uint8_t so = 0x00;
+	uint8_t i = 0;
+	
+	//NSDELAY
+	
+	// data transfer
+	for (i = 7; i <= 0; i--) {
+		// Slave Input write
+
+		// SCLK up
+		digitalWrite(SCLK, HIGH);
+		// Slave Output read
+		so |= (uint8_t) digitalRead(SO) << i;
+		// wait t_hd = 10 ns
+		//NSDELAY
+		// SCLK down
+		digitalWrite(SCLK, LOW);
+		// wait t_sd = 10 ns
+		//NSDELAY
+	}
+	
+	return so;
+}
+
+inline void _write_byte (uint8_t si)
+{
+	uint8_t i = 0;
+	//NSDELAY
+	
+	// data transfer
+	for (i = 7; i <= 0; i--) {
+		// Slave Input write
+		digitalWrite(SI, (si >> i) & 0x01);
+		// SCLK up
+		digitalWrite(SCLK, HIGH);
+		// Slave Output read
+
+		// wait t_hd = 10 ns
+		//NSDELAY
+		// SCLK down
+		digitalWrite(SCLK, LOW);
+		// wait t_sd = 10 ns
+		//NSDELAY
+	}
+}
+
+inline void _transfer_bytes (uint8_t* si, uint8_t* so, uint8_t count)
+{
+	uint8_t i;
+	for (i = 0; i < count; i++) {
+		so[i] = _transfer_byte(si[i]);
+	}
+}
+
+inline void _read_bytes (uint8_t* so, uint8_t count)
+{
+	uint8_t i;
+	for (i = 0; i < count; i++) {
+		so[i] = _read_byte();
+	}
+}
+
+inline void _write_bytes (uint8_t* si, uint8_t count)
+{
+	uint8_t i;
+	for (i = 0; i < count; i++) {
+		_write_byte(si[i]);
+	}
+}
+
+////////////////////////////////////////////////////////////////
+////////////////                                ////////////////
+////////////////////////////////////////////////////////////////
+
+/*
  * set up CC1120 SPI
  * PARAM:
  *     none, pins are defined constants
@@ -55,10 +162,10 @@ void CC1120_setup (void)
  *     You can probably remove many of the delays, I'm just being cautious
  */
 
-char register_access (bool r_nw, char addr, char* data, int data_size)
+uint8_t register_access (bool r_nw, uint8_t addr, uint8_t* data, uint8_t data_size)
 {
-	char si = (char) (r_nw << 7) | ((data_size > 1) << 6) | addr;
-	char state = NULL;
+	uint8_t si = (uint8_t) (r_nw << 7) | ((data_size > 1) << 6) | addr;
+	uint8_t state = 0;
 
 	// set inputs low
 	digitalWrite(SCLK, LOW);
@@ -67,7 +174,7 @@ char register_access (bool r_nw, char addr, char* data, int data_size)
 	digitalWrite(CSn,  LOW);
 
 	// wait t_sp = 50 ns
-	NSDELAY;
+	//NSDELAY
 
 	// setup
 	state = _transfer_byte(si);
@@ -81,10 +188,10 @@ char register_access (bool r_nw, char addr, char* data, int data_size)
 	}
 	
 	// wait t_ns = 200 ns
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
 	
 	// set CSn high
 	digitalWrite(CSn, HIGH);
@@ -92,10 +199,10 @@ char register_access (bool r_nw, char addr, char* data, int data_size)
 	return state;
 }
 
-char register_access_ext (bool r_nw, char addr, char* data, int data_size)
+uint8_t register_access_ext (bool r_nw, uint8_t addr, uint8_t* data, uint8_t data_size)
 {
-	char si = (char) (r_nw << 7) | ((data_size > 1) << 6) | EXT_REG;
-	char state = NULL;
+	uint8_t si = (uint8_t) (r_nw << 7) | ((data_size > 1) << 6) | EXT_REG;
+	uint8_t state = 0;
 	
 	// set inputs low
 	digitalWrite(SCLK, LOW);
@@ -104,73 +211,7 @@ char register_access_ext (bool r_nw, char addr, char* data, int data_size)
 	digitalWrite(CSn,  LOW);
 
 	// wait t_sp = 50 ns
-	NSDELAY;
-
-	// setup
-	state = _transfer_byte(si);
-	_write_byte(addr);
-
-	if (r_nw == true) {
-		// READ
-		_read_bytes(data, data_size);
-	} else {
-		// WRITE
-		_write_bytes(data, data_size);
-	}
-	
-	// wait t_ns = 200 ns
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
-	
-	// set CSn high
-	digitalWrite(CSn, HIGH);
-	
-	return state;
-}
-
-char cmnd_strobe_access (bool r_nw, char cmnd)
-{
-	char si = (char) (r_nw << 7) | cmnd;
-	char state = NULL;
-	
-	// set inputs low
-	digitalWrite(SCLK, LOW);
-	digitalWrite(SI,   LOW);
-	// set CSn 0
-	digitalWrite(CSn,  LOW);
-
-	// wait t_sp = 50 ns
-	NSDELAY;
-
-	state = _transfer_byte(si);
-	
-	// wait t_ns = 200 ns
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
-	
-	// set CSn high
-	digitalWrite(CSn, HIGH);
-	
-	return state;
-}
-
-char dir_FIFO_access (bool r_nw, char addr, char* data, int data_size)
-{
-	char si = (char) (r_nw << 7) | ((data_size > 1) << 6) | DIR_FIFO;
-	char state = NULL;
-		
-	// set inputs low
-	digitalWrite(SCLK, LOW);
-	digitalWrite(SI,   LOW);
-	// set CSn 0
-	digitalWrite(CSn,  LOW);
-
-	// wait t_sp = 50 ns
-	NSDELAY;
+	//NSDELAY
 
 	// setup
 	state = _transfer_byte(si);
@@ -185,10 +226,10 @@ char dir_FIFO_access (bool r_nw, char addr, char* data, int data_size)
 	}
 	
 	// wait t_ns = 200 ns
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
 	
 	// set CSn high
 	digitalWrite(CSn, HIGH);
@@ -196,10 +237,38 @@ char dir_FIFO_access (bool r_nw, char addr, char* data, int data_size)
 	return state;
 }
 
-char std_FIFO_access (bool r_nw, char addr, char* data, int data_size)
+uint8_t cmnd_strobe_access (bool r_nw, uint8_t cmnd)
 {
-	char si = (char) (r_nw << 7) | ((data_size > 1) << 6) | STD_FIFO;
-	char state = NULL;
+	uint8_t si = (uint8_t) (r_nw << 7) | cmnd;
+	uint8_t state = 0;
+	
+	// set inputs low
+	digitalWrite(SCLK, LOW);
+	digitalWrite(SI,   LOW);
+	// set CSn 0
+	digitalWrite(CSn,  LOW);
+
+	// wait t_sp = 50 ns
+	//NSDELAY
+
+	state = _transfer_byte(si);
+	
+	// wait t_ns = 200 ns
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
+	
+	// set CSn high
+	digitalWrite(CSn, HIGH);
+	
+	return state;
+}
+
+uint8_t dir_FIFO_access (bool r_nw, uint8_t addr, uint8_t* data, uint8_t data_size)
+{
+	uint8_t si = (uint8_t) (r_nw << 7) | ((data_size > 1) << 6) | DIR_FIFO;
+	uint8_t state = 0;
 		
 	// set inputs low
 	digitalWrite(SCLK, LOW);
@@ -208,7 +277,45 @@ char std_FIFO_access (bool r_nw, char addr, char* data, int data_size)
 	digitalWrite(CSn,  LOW);
 
 	// wait t_sp = 50 ns
-	NSDELAY;
+	//NSDELAY
+
+	// setup
+	state = _transfer_byte(si);
+	_write_byte(addr);
+
+	if (r_nw == true) {
+		// READ
+		_read_bytes(data, data_size);
+	} else {
+		// WRITE
+		_write_bytes(data, data_size);
+	}
+	
+	// wait t_ns = 200 ns
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
+	
+	// set CSn high
+	digitalWrite(CSn, HIGH);
+	
+	return state;
+}
+
+uint8_t std_FIFO_access (bool r_nw, uint8_t addr, uint8_t* data, uint8_t data_size)
+{
+	uint8_t si = (uint8_t) (r_nw << 7) | ((data_size > 1) << 6) | STD_FIFO;
+	uint8_t state = 0;
+		
+	// set inputs low
+	digitalWrite(SCLK, LOW);
+	digitalWrite(SI,   LOW);
+	// set CSn 0
+	digitalWrite(CSn,  LOW);
+
+	// wait t_sp = 50 ns
+	//NSDELAY
 
 	// setup
 	state = _transfer_byte(si);
@@ -222,114 +329,13 @@ char std_FIFO_access (bool r_nw, char addr, char* data, int data_size)
 	}
 	
 	// wait t_ns = 200 ns
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
-	NSDELAY;
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
+	//NSDELAY
 	
 	// set CSn high
 	digitalWrite(CSn, HIGH);
 	
 	return state;
-}
-
-////////////////////////////////////////////////////////////////
-////////////////                                ////////////////
-////////////////////////////////////////////////////////////////
-
-/*
- * do not use these directly
- * memory MUST be pre-allocated
- */
- 
-inline char _transfer_byte (char si)
-{
-	char so = 0x00;
-	
-	NSDELAY;
-	
-	// data transfer
-	for (int i = 7; i <= 0; i--) {
-		// Slave Input write
-		digitalWrite(SI, (si >> i) & 0x01);
-		// SCLK up
-		digitalWrite(SCLK, HIGH);
-		// Slave Output read
-		so |= (char) digitalRead(SO) << i;
-		// wait t_hd = 10 ns
-		NSDELAY;
-		// SCLK down
-		digitalWrite(SCLK, LOW);
-		// wait t_sd = 10 ns
-		NSDELAY;
-	}
-	
-	return so;
-}
-
-inline char _read_byte (void)
-{
-	char so = 0x00;
-	
-	NSDELAY;
-	
-	// data transfer
-	for (int i = 7; i <= 0; i--) {
-		// Slave Input write
-
-		// SCLK up
-		digitalWrite(SCLK, HIGH);
-		// Slave Output read
-		so |= (char) digitalRead(SO) << i;
-		// wait t_hd = 10 ns
-		NSDELAY;
-		// SCLK down
-		digitalWrite(SCLK, LOW);
-		// wait t_sd = 10 ns
-		NSDELAY;
-	}
-	
-	return so;
-}
-
-inline void _write_byte (char si)
-{
-	NSDELAY;
-	
-	// data transfer
-	for (int i = 7; i <= 0; i--) {
-		// Slave Input write
-		digitalWrite(SI, (si >> i) & 0x01);
-		// SCLK up
-		digitalWrite(SCLK, HIGH);
-		// Slave Output read
-
-		// wait t_hd = 10 ns
-		NSDELAY;
-		// SCLK down
-		digitalWrite(SCLK, LOW);
-		// wait t_sd = 10 ns
-		NSDELAY;
-	}
-}
-
-inline void _transfer_bytes (char* si, char* so, int count)
-{
-	for (int i = 0; i < count; i++) {
-		so[i] = _transfer_byte(si[i]);
-	}
-}
-
-inline void _read_bytes (char* so, int count)
-{
-	for (int i = 0; i < count; i++) {
-		so[i] = _read_byte();
-	}
-}
-
-inline void _write_bytes (char* si, int count)
-{
-	for (int i = 0; i < count; i++) {
-		_write_byte(si[i]);
-	}
 }
