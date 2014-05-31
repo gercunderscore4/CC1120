@@ -7,7 +7,9 @@
  * NOTES:   Can't use standard Arduino SPI because this transmits 2 bytes per enable
  */
 
- #include <Arduino.h>
+#include "Arduino.h"
+#include <stdbool.h>
+#include <stdint.h>
  
 // pins
 // to make this slighly faster, use direct I/O
@@ -20,7 +22,7 @@
 // timing
 // 16 MHz, 62.5 ns, re-write if you change MCP
 // http://playground.arduino.cc/Main/AVR
-#define NSDELAY __asm__("nop\n\t")
+//#define NSDELAY __asm__("nop\n\t")
 // these are minima, real values should be greater than (say +10 ns)
 /*
 #define T_SP 50 // ns
@@ -42,13 +44,30 @@
 ////////////////////////////////////////////////////////////////
 
 /*
+ * do not use these directly
+ * memory MUST be pre-allocated
+ */
+/*
+inline uint8_t _transfer_byte (uint8_t si);
+inline uint8_t _read_byte (void);
+inline void _write_byte (uint8_t si);
+inline void _transfer_bytes (uint8_t* si, uint8_t* so, int count);
+inline void _read_bytes (uint8_t* so, uint8_t count);
+inline void _write_bytes (uint8_t* si, uint8_t count);
+*/
+
+////////////////////////////////////////////////////////////////
+////////////////                                ////////////////
+////////////////////////////////////////////////////////////////
+
+/*
  * set up CC1120 SPI
  * PARAM:
  *     none, pins are defined constants
  * RETURN:
  *     void, there's nothing to return, if it fails, nothing will work anyway
  */
-void CC1120_setup (void)
+void CC1120_setup (void);
 
 ////////////////////////////////////////////////////////////////
 ////////////////                                ////////////////
@@ -72,24 +91,8 @@ void CC1120_setup (void)
  *     You can probably remove many of the delays, I'm just being cautious
  */
 
-char register_access (bool r_nw, char addr, char* data, int data_size);
-char register_access_ext (bool r_nw, char addr, char* data, int data_size);
-char cmnd_strobe_access (bool r_nw, char cmnd);
-char dir_FIFO_access (bool r_nw, char addr, char* data, int data_size);
-char std_FIFO_access (bool r_nw, char addr, char* data, int data_size);
-
-////////////////////////////////////////////////////////////////
-////////////////                                ////////////////
-////////////////////////////////////////////////////////////////
-
-/*
- * do not use these directly
- * memory MUST be pre-allocated
- */
- 
-inline char _transfer_byte (char si);
-inline char _read_byte (void);
-inline void _write_byte (char si);
-inline void _transfer_bytes (char* si, char* so, int count);
-inline void _read_bytes (char* so, int count);
-inline void _write_bytes (char* si, int count);
+uint8_t register_access (bool r_nw, uint8_t addr, uint8_t* data, uint8_t data_size);
+uint8_t register_access_ext (bool r_nw, uint8_t addr, uint8_t* data, uint8_t data_size);
+uint8_t cmnd_strobe_access (bool r_nw, uint8_t cmnd);
+uint8_t dir_FIFO_access (bool r_nw, uint8_t addr, uint8_t* data, uint8_t data_size);
+uint8_t std_FIFO_access (bool r_nw, uint8_t addr, uint8_t* data, uint8_t data_size);
